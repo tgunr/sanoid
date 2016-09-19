@@ -17,7 +17,8 @@ my %args = getargs(@ARGV);
 
 my $pscmd = 'ps';
 
-my $zfs = 'zfs';
+my $sudocmd = 'sudo';
+my $zfs = '/usr/local/bin/zfs';
 
 if ($args{'configdir'} eq '') { $args{'configdir'} = '/etc/sanoid'; }
 my $conf_file = "$args{'configdir'}/sanoid.conf";
@@ -224,7 +225,10 @@ sub prune_snapshots {
 						if (iszfsbusy($path)) {
 							print "INFO: deferring pruning of $snap - $path is currently in zfs send or receive.\n";
 						} else {
-							if (! $args{'readonly'}) { system($zfs, "destroy",$snap) == 0 or die "could not remove $snap : $?"; }
+							if (! $args{'readonly'}) {
+										my $sendcmd = "$sudocmd $zfs destroy $snap";
+										system($sendcmd) == 0 or die "CRITICAL ERROR: $sendcmd failed: $?";
+							}
 						}
 					}
 					removelock('sanoid_pruning');
@@ -331,9 +335,9 @@ sub take_snapshots {
 	if ( (scalar(@newsnaps)) > 0) {
 		foreach my $snap ( @newsnaps ) {
 			if ($args{'verbose'}) { print "taking snapshot $snap\n"; }
-			if (!$args{'readonly'}) { 
-				system($zfs, "snapshot", "$snap") == 0
-					or die "CRITICAL ERROR: $zfs snapshot $snap failed, $?";
+			if (!$args{'readonly'}) {
+				my $sendcmd = "$sudocmd $zfs snapshot $snap";
+				system($sendcmd) == 0 or die "CRITICAL ERROR: $sendcmd failed: $?";
 				# make sure we don't end up with multiple snapshots with the same ctime
 				sleep 1;
 			}
@@ -480,17 +484,18 @@ sub getsnaps {
 	if ( $forcecacheupdate || (time() - $mtime) > $cacheTTL ) {
 		if (checklock('sanoid_cacheupdate')) {
 			writelock('sanoid_cacheupdate');
-			if ($args{'verbose'}) { 
+			if ($args{'verbose'}) {
 				if ($args{'force-update'}) {
 					print "INFO: cache forcibly expired - updating from zfs list.\n";
 				} else {
-					print "INFO: cache expired - updating from zfs list.\n"; 
+					print "INFO: cache expired - updating from zfs list.\n";
 				}
 			}
-			open FH, "$zfs get -Hpt snapshot creation |";
+			my $sendcmd = "$sudocmd $zfs get -Hpt snapshot creation |";
+			open FH, "$sendcmd";
 			@rawsnaps = <FH>;
 			close FH;
-	
+
 			open FH, "> $cache" or die 'Could not write to $cache!\n';
 			print FH @rawsnaps;
 			close FH;
@@ -1091,9 +1096,8 @@ sub getargs {
 sub getchilddatasets {
 	# for later, if we make sanoid itself support sudo use
 	my $fs = shift;
-	my $mysudocmd;
 
-	my $getchildrencmd = "$mysudocmd $zfs list -o name -Hr $fs |";
+	my $getchildrencmd = "$sudocmd $zfs  list -o name -Hr $fs |";
 	 if ($args{'debug'}) { print "DEBUG: getting list of child datasets on $fs using $getchildrencmd...\n"; }
 	open FH, $getchildrencmd;
 	my @children = <FH>;
