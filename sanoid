@@ -15,9 +15,9 @@ use Time::Local;	# to parse dates in reverse
 # parse CLI arguments
 my %args = getargs(@ARGV);
 
-my $pscmd = '/bin/ps';
+my $pscmd = 'ps';
 
-my $zfs = '/sbin/zfs';
+my $zfs = 'zfs';
 
 if ($args{'configdir'} eq '') { $args{'configdir'} = '/etc/sanoid'; }
 my $conf_file = "$args{'configdir'}/sanoid.conf";
