@@ -7,6 +7,7 @@
 my $version = '1.4.7';
 
 use strict;
+use lib ("/usr/local/ActivePerl-5.24/site/lib");
 use Config::IniFiles;   # read samba-style conf file
 use File::Path;         # for rmtree command in use_prune
 use Data::Dumper;	# debugging - print contents of hash
