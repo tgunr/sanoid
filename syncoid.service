@@ -1,0 +1,6 @@
+[Unit]
+Description=Syncoid Backup Service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/syncoid_backup.sh

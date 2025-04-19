@@ -1,0 +1,14 @@
+[Unit]
+Description=Syncoid Runner Service
+Documentation=https://github.com/tgunr/sanoid
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=TZ=UTC
+ExecStart=/usr/local/bin/syncoid-runner
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
