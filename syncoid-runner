@@ -624,24 +624,29 @@ async def main():
                     last_snapshot_date = await get_last_snapshot_date(destination, is_remote)
 
                     # Determine max_age based on frequency
-                    template = config.templates.get(template_name)
+                    template_key = f"template_{template_name}"
+                    template = config.templates.get(template_key)
                     if not template:
-                        print_message(colored(f"No template found for {destination}, skipping verification.", "yellow"))
+                        print_message(colored(f"No template found for {section}, skipping verification.", "yellow"))
+                        i += 1
                         continue
 
                     frequency = template.get('frequency')
                     if not frequency:
-                        print_message(colored(f"No frequency defined in template {template_name}, skipping verification.", "yellow"))
+                        print_message(colored(f"No frequency defined in template {template_key}, skipping verification.", "yellow"))
+                        i += 1
                         continue
 
                     freq_value, freq_unit = parse_frequency(frequency)
                     if freq_value is None or freq_unit is None:
-                        print_message(colored(f"Invalid frequency format in template {template_name}, skipping verification.", "yellow"))
+                        print_message(colored(f"Invalid frequency format in template {template_key}, skipping verification.", "yellow"))
+                        i += 1
                         continue
 
                     max_age_seconds = freq_value * FREQUENCY_MULTIPLIERS.get(freq_unit, 0)
                     if max_age_seconds == 0:
-                        print_message(colored(f"Invalid frequency unit {freq_unit} in template {template_name}, skipping verification.", "yellow"))
+                        print_message(colored(f"Invalid frequency unit {freq_unit} in template {template_key}, skipping verification.", "yellow"))
+                        i += 1
                         continue
 
                     # Determine if the snapshot is within the acceptable age
