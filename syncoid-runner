@@ -13,6 +13,7 @@ import os
 from termcolor import colored
 import re
 import asyncio
+import zlib
 
 # Global flag to control output verbosity
 QUIET_MODE = True
@@ -175,6 +176,71 @@ def cleanup_snapshots(dataset, retention_policies, is_remote=False):
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print_message(f"Error deleting snapshot {snapshot}: {result.stderr}", is_error=True)
+
+async def verify_snapshot_age(dataset, max_age_seconds, is_remote=False):
+    """Verify the age of the latest snapshot on a dataset.
+
+    Args:
+        dataset: The ZFS dataset to check (can be remote:pool/dataset)
+        max_age_seconds: Maximum allowed age of the snapshot in seconds
+        is_remote: Boolean, True if the dataset is on a remote host
+
+    Returns:
+        True if the latest snapshot is within the max_age, False otherwise.
+    """
+    try:
+        if is_remote:
+            host, dataset_path = dataset.split(':', 1)
+            cmd = f'ssh {host} "zfs list -t snapshot -r -H -o name,creation -s creation {dataset_path} | tail -n 1"'
+        else:
+            cmd = f'zfs list -t snapshot -r -H -o name,creation -s creation {dataset} | tail -n 1'
+
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            print_message(f"Error listing snapshots for {dataset}: {stderr.decode()}", is_error=True)
+            return False
+
+        output = stdout.decode().strip()
+        if not output:
+            print_message(f"No snapshots found for {dataset}", is_error=True)
+            return False
+
+        name, creation_str = output.split('\t')
+        try:
+            # Attempt to parse the creation date using different formats
+            creation_date = None
+            for fmt in ['%c', '%a %b %d %H:%M %Y', '%Y-%m-%d %H:%M:%S']:
+                try:
+                    creation_date = datetime.strptime(creation_str.strip(), fmt)
+                    break
+                except ValueError:
+                    continue
+
+            if creation_date is None:
+                raise ValueError("No valid date format found")
+
+            age_seconds = (datetime.now() - creation_date).total_seconds()
+
+            if age_seconds <= max_age_seconds:
+                print_message(colored(f"Latest snapshot for {dataset} is within the acceptable age.", "green"))
+                return True
+            else:
+                print_message(colored(f"Latest snapshot for {dataset} is too old.", "red"), is_error=True)
+                return False
+
+        except Exception as e:
+            print_message(f"Error processing snapshot data for {dataset}: {e}", is_error=True)
+            return False
+
+    except Exception as e:
+        print_message(f"General error verifying snapshot age for {dataset}: {e}", is_error=True)
+        return False
 
 class SyncoidConfig:
     def __init__(self, config_path):
@@ -413,6 +479,7 @@ async def main():
     parser.add_argument('--cleanup', action='store_true', help='Run retention policy cleanup')
     parser.add_argument('--help-details', action='store_true', 
                    help='Display detailed documentation about this script')
+    parser.add_argument('--verify', action='store_true', help='Verify the age of the latest snapshot on each destination')
     
     args = parser.parse_args()
     
@@ -493,7 +560,49 @@ async def main():
             print_message(f"{cmd}\n")
         print_message(colored("-" * 50, "cyan"))
         return
-        
+    
+    # Verify snapshot age if --verify is enabled
+    if args.verify:
+        successes = 0
+        failures = 0
+        for ds in config.datasets:
+            template = config.templates.get(ds['template'])
+            if not template:
+                print_message(colored(f"No template found for {ds['source']}, skipping verification.", "yellow"))
+                failures += 1
+                continue
+
+            # Determine max_age based on frequency
+            frequency = template.get('frequency')
+            if not frequency:
+                print_message(colored(f"No frequency defined in template {ds['template']}, skipping verification.", "yellow"))
+                failures += 1
+                continue
+
+            freq_value, freq_unit = parse_frequency(frequency)
+            if freq_value is None or freq_unit is None:
+                print_message(colored(f"Invalid frequency format in template {ds['template']}, skipping verification.", "yellow"))
+                failures += 1
+                continue
+
+            max_age_seconds = freq_value * FREQUENCY_MULTIPLIERS.get(freq_unit, 0)
+            if max_age_seconds == 0:
+                print_message(colored(f"Invalid frequency unit {freq_unit} in template {ds['template']}, skipping verification.", "yellow"))
+                failures += 1
+                continue
+
+            # Determine if the destination is remote
+            is_remote = ':' in ds['destination']
+
+            # Verify the snapshot age
+            if await verify_snapshot_age(ds['destination'], max_age_seconds, is_remote):
+                successes += 1
+            else:
+                failures += 1
+
+        print_message(colored(f"\nSnapshot verification complete: {successes} successful, {failures} failed.", "cyan"))
+        return # Exit after verification
+
     for cmd in commands:
         dataset = cmd.split()[-2]
         destination = cmd.split()[-1]
@@ -538,6 +647,7 @@ OPTIONS
 --dry-run                 Show commands without executing them
 --cleanup                 Run retention policy cleanup on snapshots
 --help-details            Display this detailed help information
+--verify                  Verify the age of the latest snapshot on each destination
 
 CONFIGURATION FILE FORMAT
 ------------------------
@@ -571,6 +681,9 @@ syncoid-runner --dry-run
 
 # Clean up snapshots according to retention policies
 syncoid-runner --cleanup
+
+# Verify the age of the latest snapshot on each destination
+syncoid-runner --verify
 
 For more information, visit: https://github.com/jimsalterjrs/sanoid/
 """
