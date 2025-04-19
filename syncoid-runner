@@ -623,9 +623,57 @@ async def main():
                     # Get the last snapshot date
                     last_snapshot_date = await get_last_snapshot_date(destination, is_remote)
 
+                    # Determine max_age based on frequency
+                    template = config.templates.get(template_name)
+                    if not template:
+                        print_message(colored(f"No template found for {destination}, skipping verification.", "yellow"))
+                        continue
+
+                    frequency = template.get('frequency')
+                    if not frequency:
+                        print_message(colored(f"No frequency defined in template {template_name}, skipping verification.", "yellow"))
+                        continue
+
+                    freq_value, freq_unit = parse_frequency(frequency)
+                    if freq_value is None or freq_unit is None:
+                        print_message(colored(f"Invalid frequency format in template {template_name}, skipping verification.", "yellow"))
+                        continue
+
+                    max_age_seconds = freq_value * FREQUENCY_MULTIPLIERS.get(freq_unit, 0)
+                    if max_age_seconds == 0:
+                        print_message(colored(f"Invalid frequency unit {freq_unit} in template {template_name}, skipping verification.", "yellow"))
+                        continue
+
+                    # Determine if the snapshot is within the acceptable age
+                    is_within_age = False
+                    try:
+                        if last_snapshot_date != "No snapshots found" and last_snapshot_date != "Error listing snapshots" and last_snapshot_date != "Error getting snapshot data":
+                            creation_date = None
+                            for fmt in ['%c', '%a %b %d %H:%M %Y', '%Y-%m-%d %H:%M:%S']:
+                                try:
+                                    creation_date = datetime.strptime(last_snapshot_date.strip(), fmt)
+                                    break
+                                except ValueError:
+                                    continue
+
+                            if creation_date is None:
+                                raise ValueError("No valid date format found")
+
+                            age_seconds = (datetime.now() - creation_date).total_seconds()
+                            is_within_age = age_seconds <= max_age_seconds
+                    except Exception as e:
+                        print_message(f"Error processing snapshot data for {destination}: {e}", is_error=True)
+                        is_within_age = False
+
+                    # Print the output with color
+                    if is_within_age:
+                        last_backup_colored = colored(last_snapshot_date, "green")
+                    else:
+                        last_backup_colored = colored(last_snapshot_date, "red")
+
                     print_message(colored(f"\n[{section}]", "cyan"))
                     print_message(f"{dest_key} = {destination}")
-                    print_message(f"last_backup = {last_snapshot_date}")
+                    print_message(f"last_backup = {last_backup_colored}")
                     print_message(f"use_template = {template_name}")
 
                     i += 1
