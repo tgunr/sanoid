@@ -603,6 +603,7 @@ async def main():
     
     # Verify snapshot age if --verify is enabled
     if args.verify:
+        QUIET_MODE = False  # Ensure messages are printed during verification
         for section in config.config.sections():
             if not section.startswith('template_') and section != 'DEFAULT':
                 # Get the template being used
