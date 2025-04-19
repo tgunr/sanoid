@@ -605,11 +605,8 @@ async def main():
     if args.verify:
         for section in config.config.sections():
             if not section.startswith('template_') and section != 'DEFAULT':
-                print_message(colored(f"\n[{section}]", "cyan"))
-                
                 # Get the template being used
                 template_name = config.config[section].get('use_template', 'default')
-                print_message(f"use_template = {template_name}")
 
                 # Iterate through destinations
                 i = 1
@@ -625,8 +622,10 @@ async def main():
                     # Get the last snapshot date
                     last_snapshot_date = await get_last_snapshot_date(destination, is_remote)
 
+                    print_message(colored(f"\n[{section}]", "cyan"))
                     print_message(f"{dest_key} = {destination}")
                     print_message(f"last_backup = {last_snapshot_date}")
+                    print_message(f"use_template = {template_name}")
 
                     i += 1
         return # Exit after verification
