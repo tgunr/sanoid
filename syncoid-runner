@@ -352,7 +352,6 @@ class SyncoidConfig:
             None: This method does not raise exceptions but skips invalid datasets
                   or templates with warnings printed to the console.
         """
-        """Generate cron entries based on template frequencies"""
         cron_jobs = []
         # Add cron file header
         cron_jobs.append("# Syncoid automated backup cron jobs")
@@ -389,9 +388,7 @@ class SyncoidConfig:
                     continue
                 
                 freq_value, freq_unit = parse_frequency(template['frequency'])
-                if freq_value is None:
-                    continue
-                    
+                
                 hour, day = get_staggered_schedule(source, freq_unit)
                 
                 if freq_unit == 'm':
@@ -419,8 +416,12 @@ class SyncoidConfig:
                     cron_time = f'0 {hour} 1 1 *'
                     schedule_msg = f"yearly on Jan 1st at {hour:02d}:00"
                 else:
-                    print_message(colored(f"Unknown frequency unit: {freq_unit}", 'red'), is_error=True)
-                    continue
+                    if freq_value is None:
+                        schedule_msg = f"No Frequency"
+                        cron_time = f'0 0 1 1 *'
+                    else:
+                        schedule_msg = f"Unknown frequency unit: {freq_unit}"
+                        cron_time = f'0 0 1 1 *'
                 
                 print_message(colored(f"Scheduling backup for {source} {schedule_msg}", 'blue'))
                 cron_cmd = f'{cron_time} root /usr/local/bin/syncoid-runner --dataset {source}'
