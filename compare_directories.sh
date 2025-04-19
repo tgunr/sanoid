@@ -31,7 +31,7 @@ find "$DIR2" -type f -printf "%P\n" | sort > "$TEMP2"
 
 # Find files that are in DIR1 but not in DIR2
 echo "Files present in $DIR1 but missing in $DIR2:"
-comm -23 "$TEMP1" "$TEMP2"
+comm -23 "$TEMP1" "$TEMP2" >> diff.txt
 
 # Count missing files
 MISSING_COUNT=$(comm -23 "$TEMP1" "$TEMP2" | wc -l)
