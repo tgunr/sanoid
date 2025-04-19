@@ -603,52 +603,32 @@ async def main():
     
     # Verify snapshot age if --verify is enabled
     if args.verify:
-        successes = 0
-        failures = 0
-        for ds in config.datasets:
-            template = config.templates.get(ds['template'])
-            if not template:
-                print_message(colored(f"No template found for {ds['source']}, skipping verification.", "yellow"))
-                failures += 1
-                continue
+        for section in config.config.sections():
+            if not section.startswith('template_') and section != 'DEFAULT':
+                print_message(colored(f"\n[{section}]", "cyan"))
+                
+                # Get the template being used
+                template_name = config.config[section].get('use_template', 'default')
+                print_message(f"use_template = {template_name}")
 
-            # Determine max_age based on frequency
-            frequency = template.get('frequency')
-            if not frequency:
-                print_message(colored(f"No frequency defined in template {ds['template']}, skipping verification.", "yellow"))
-                failures += 1
-                continue
+                # Iterate through destinations
+                i = 1
+                while True:
+                    dest_key = f'destination_{i}'
+                    destination = config.config[section].get(dest_key)
+                    if not destination:
+                        break
 
-            freq_value, freq_unit = parse_frequency(frequency)
-            if freq_value is None or freq_unit is None:
-                print_message(colored(f"Invalid frequency format in template {ds['template']}, skipping verification.", "yellow"))
-                failures += 1
-                continue
+                    # Determine if the destination is remote
+                    is_remote = ':' in destination
 
-            max_age_seconds = freq_value * FREQUENCY_MULTIPLIERS.get(freq_unit, 0)
-            if max_age_seconds == 0:
-                print_message(colored(f"Invalid frequency unit {freq_unit} in template {ds['template']}, skipping verification.", "yellow"))
-                failures += 1
-                continue
+                    # Get the last snapshot date
+                    last_snapshot_date = await get_last_snapshot_date(destination, is_remote)
 
-            # Determine if the destination is remote
-            is_remote = ':' in ds['destination']
+                    print_message(f"{dest_key} = {destination}")
+                    print_message(f"last_backup = {last_snapshot_date}")
 
-            # Get the last snapshot date
-            last_snapshot_date = await get_last_snapshot_date(ds['destination'], is_remote)
-
-            # Print the verification details
-            print_message(colored(f"Verifying {ds['destination']}:", "cyan"))
-            print_message(f"  Template: {ds['template']}")
-            print_message(f"  Last Snapshot: {last_snapshot_date}")
-
-            # Verify the snapshot age
-            if await verify_snapshot_age(ds['destination'], max_age_seconds, is_remote):
-                successes += 1
-            else:
-                failures += 1
-
-        print_message(colored(f"\nSnapshot verification complete: {successes} successful, {failures} failed.", "cyan"))
+                    i += 1
         return # Exit after verification
 
     for cmd in commands:
