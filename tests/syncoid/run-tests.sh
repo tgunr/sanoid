@@ -2,7 +2,7 @@
 
 # run's all the available tests
 
-for test in $(find . -mindepth 1 -maxdepth 1 -type d -printf "%P\n" | sort -g); do
+for test in */; do
     if [ ! -x "${test}/run.sh" ]; then
         continue
     fi
@@ -17,11 +17,8 @@ for test in $(find . -mindepth 1 -maxdepth 1 -type d -printf "%P\n" | sort -g); 
     cd "${test}"
     echo | bash run.sh > "${LOGFILE}" 2>&1
 
-    ret=$?
-    if [ $ret -eq 0 ]; then
+    if [ $? -eq 0 ]; then
         echo "[PASS]"
-    elif [ $ret -eq 130 ]; then
-        echo "[SKIPPED]"
     else
         echo "[FAILED] (see ${LOGFILE})"
     fi
