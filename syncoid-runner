@@ -114,8 +114,32 @@ def parse_retention(retention_str):
             policies.append((value, unit, count))
     return policies
 
-def cleanup_snapshots(dataset, retention_policies, is_remote=False):
-    """Clean up snapshots based on retention policy"""
+def cleanup_snapshots(dataset, retention_policies, is_remote=False, dry_run=False):
+    """
+    Cleans up ZFS snapshots for a given dataset based on specified retention policies.
+    Args:
+        dataset (str): The ZFS dataset to clean up. Can include a remote host in the format 'host:dataset_path'.
+        retention_policies (list of tuples): A list of retention policies, where each policy is a tuple 
+            (duration_value, duration_unit, keep_count). 
+            - duration_value (int): The value of the duration (e.g., 7 for 7 days).
+            - duration_unit (str): The unit of the duration ('s' for seconds, 'm' for minutes, 'h' for hours, 
+              'd' for days, 'w' for weeks, 'M' for months, 'y' for years).
+            - keep_count (int): The number of snapshots to keep within the specified duration.
+        is_remote (bool, optional): Indicates if the dataset is on a remote host. Defaults to False.
+        dry_run (bool, optional): If True, only show what would be deleted without actually deleting.
+    Returns:
+        None
+    Behavior:
+        - Lists all snapshots for the specified dataset.
+        - Parses snapshot creation dates and filters snapshots based on retention policies.
+        - Deletes snapshots that do not match the retention policies.
+        - Handles both local and remote datasets.
+        - Logs errors and actions taken during the cleanup process.
+    Notes:
+        - The function assumes that snapshots containing the string 'syncoid' are relevant for cleanup.
+        - Retention policies are applied in order, and snapshots are grouped by age.
+        - The function uses `subprocess.run` to execute ZFS commands and SSH commands for remote datasets.
+    """
     if ':' in dataset:
         host, dataset_path = dataset.split(':', 1)
         cmd = ['ssh', host, f'zfs list -t snapshot -o name,creation -s creation -r -H "{dataset_path}"']
@@ -165,17 +189,25 @@ def cleanup_snapshots(dataset, retention_policies, is_remote=False):
         to_delete.update(name for name, _ in period_snapshots[keep_count:])
 
     # Delete snapshots that don't match retention policy
-    for snapshot in to_delete:
-        if ':' in dataset:
-            host, _ = dataset.split(':', 1)
-            cmd = ['ssh', host, f'zfs destroy "{snapshot}"']
+    if dry_run:
+        if to_delete:
+            print_message(colored(f"\nSnapshots that would be deleted for {dataset}:", "yellow"))
+            for snapshot in sorted(to_delete):
+                print_message(colored(f"  {snapshot}", "red"))
         else:
-            cmd = ['zfs', 'destroy', snapshot]
-            
-        print_message(f"Deleting snapshot: {snapshot}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print_message(f"Error deleting snapshot {snapshot}: {result.stderr}", is_error=True)
+            print_message(colored(f"No snapshots would be deleted for {dataset}", "green"))
+    else:
+        for snapshot in to_delete:
+            if ':' in dataset:
+                host, _ = dataset.split(':', 1)
+                cmd = ['ssh', host, f'zfs destroy "{snapshot}"']
+            else:
+                cmd = ['zfs', 'destroy', snapshot]
+                
+            print_message(f"Deleting snapshot: {snapshot}")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print_message(f"Error deleting snapshot {snapshot}: {result.stderr}", is_error=True)
 
 async def verify_snapshot_age(dataset, max_age_seconds, is_remote=False):
     """Verify the age of the latest snapshot on a dataset.
@@ -546,12 +578,12 @@ async def main():
                 # Clean up local snapshots
                 if local_retention:
                     local_policies = parse_retention(local_retention)
-                    cleanup_snapshots(ds['source'], local_policies)
+                    cleanup_snapshots(ds['source'], local_policies, dry_run=args.dry_run)
                 
                 # Clean up remote snapshots
                 if remote_retention and ':' in ds['destination']:
                     remote_policies = parse_retention(remote_retention)
-                    cleanup_snapshots(ds['destination'], remote_policies, is_remote=True)
+                    cleanup_snapshots(ds['destination'], remote_policies, is_remote=True, dry_run=args.dry_run)
         return
 
     if args.generate_cron:
