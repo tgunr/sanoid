@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Sanoid Pruning Process Periodically
+Documentation=https://github.com/jimsalterjrs/sanoid
+
+[Timer]
+OnCalendar=*:15/30
+Persistent=true
+
+[Install]
+WantedBy=timers.target

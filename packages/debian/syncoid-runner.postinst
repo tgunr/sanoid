@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create the syncoid configuration directory if it doesn't exist
+        if [ ! -d /etc/syncoid ]; then
+            mkdir -p /etc/syncoid
+        fi
+        
+        # Reload systemd to recognize new units
+        if [ -x /bin/systemctl ]; then
+            systemctl daemon-reload || true
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

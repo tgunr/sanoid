@@ -1,0 +1,33 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # Create directories if they don't exist
+        if [ ! -d /etc/sanoid ]; then
+            mkdir -p /etc/sanoid
+        fi
+        
+        if [ ! -d /etc/syncoid ]; then
+            mkdir -p /etc/syncoid
+        fi
+        
+        # Reload systemd to recognize new units
+        if [ -x /bin/systemctl ]; then
+            systemctl daemon-reload || true
+        fi
+        
+        # Remove old cache file (from existing postinst)
+        [ -f /var/cache/sanoidsnapshots.txt ] && rm /var/cache/sanoidsnapshots.txt || true
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

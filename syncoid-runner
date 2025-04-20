@@ -552,8 +552,16 @@ async def main():
     parser.add_argument('--help-details', action='store_true', 
                    help='Display detailed documentation about this script')
     parser.add_argument('--verify', action='store_true', help='Verify the age of the latest snapshot on each destination')
+    parser.add_argument('--force', action='store_true', help='Force cron job generation even if config unchanged')
     
-    args = parser.parse_args()
+    # Use parse_known_args instead of parse_args to catch unrecognized arguments
+    args, unknown = parser.parse_known_args()
+    
+    # If there are any unrecognized arguments, display help
+    if unknown:
+        print(f"Unknown argument(s): {' '.join(unknown)}")
+        parser.print_help()
+        return
     
     if args.help_details:
         print_detailed_help()
@@ -562,6 +570,70 @@ async def main():
     global QUIET_MODE
     QUIET_MODE = not args.dry_run
     
+    if args.generate_cron:
+        # Force verbose output for cron generation
+        QUIET_MODE = False
+        config_file = args.config
+        
+        # Check if config file exists
+        if not os.path.exists(config_file):
+            print_message(colored(f"Config file {config_file} does not exist! No cron jobs to generate.", "red"), is_error=True)
+            return
+            
+        # Check if config file has been modified since last cron generation
+        last_update_file = '/var/lib/syncoid-runner/last_cron_update'
+        config_mtime = os.path.getmtime(config_file)
+        
+        should_generate = args.force  # Always generate if --force is specified
+        
+        if not should_generate:
+            if not os.path.exists(last_update_file):
+                # No record of last update, so we should generate
+                should_generate = True
+                print_message(colored("No record of previous cron generation, generating cron jobs.", "yellow"))
+            else:
+                last_update_time = os.path.getmtime(last_update_file)
+                if config_mtime > last_update_time:
+                    # Config file has been modified since last update
+                    should_generate = True
+                    print_message(colored(f"Config file has been modified since last cron generation ({datetime.fromtimestamp(config_mtime).strftime('%Y-%m-%d %H:%M:%S')}).", "yellow"))
+                else:
+                    print_message(colored("Config file has not been modified since last cron generation. Use --force to generate anyway.", "yellow"))
+        
+        if not should_generate:
+            return
+            
+        try:
+            config = SyncoidConfig(config_file)
+        except Exception as e:
+            print_message(f"Error reading config: {e}", is_error=True)
+            sys.exit(1)
+            
+        cron_content = config.generate_cron()
+        if args.dry_run:
+            print_message(colored("\nCron entries that would be generated:", "cyan"))
+            print_message(colored("-" * 50, "cyan"))
+            print_message(cron_content)
+        else:
+            cron_file = '/etc/cron.d/syncoid-jobs'
+            try:
+                with open(cron_file, 'w') as f:
+                    f.write(cron_content)
+                print_message(colored(f"\nCron entries written to {cron_file}", "green"))
+                
+                # Update the last update timestamp
+                os.makedirs(os.path.dirname(last_update_file), exist_ok=True)
+                with open(last_update_file, 'w') as f:
+                    f.write(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                    
+                print_message(colored("Restarting cron service...", "blue"))
+                subprocess.run(['systemctl', 'restart', 'cron'], check=True)
+                print_message(colored("Cron service restarted successfully!", "green"))
+            except Exception as e:
+                print_message(colored(f"Error writing cron file: {e}", "red"), is_error=True)
+                sys.exit(1)
+        return
+        
     try:
         config = SyncoidConfig(args.config)
     except Exception as e:
@@ -761,6 +833,7 @@ OPTIONS
 --cleanup                 Run retention policy cleanup on snapshots
 --help-details            Display this detailed help information
 --verify                  Verify the age of the latest snapshot on each destination
+--force                   Force cron job generation even if config file hasn't changed
 
 CONFIGURATION FILE FORMAT
 ------------------------

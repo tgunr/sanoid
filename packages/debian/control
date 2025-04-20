@@ -1,23 +1,17 @@
 Source: sanoid
 Section: utils
 Priority: optional
-Maintainer: Jim Salter <jim@openoid.net>
+Maintainer: Dave Carlton <davec@mac.com/>
 Build-Depends: debhelper (>= 10)
 Standards-Version: 4.1.2
-Homepage: https://github.com/jimsalterjrs/sanoid
-Vcs-Git: https://github.com/jimsalterjrs/sanoid.git
-Vcs-Browser: https://github.com/jimsalterjrs/sanoid
+Homepage: https://github.com/tgunr/sanoid
 
 Package: sanoid
 Architecture: all
-Depends: libcapture-tiny-perl,
-         libconfig-inifiles-perl,
-         zfsutils-linux | zfs | openzfs-zfsutils,
-         ${misc:Depends},
-         ${perl:Depends}
-Recommends: gzip,
-            lzop,
-            mbuffer,
-            openssh-client | ssh-client,
-            pv
+Depends: ${misc:Depends}, ${perl:Depends}, libconfig-inifiles-perl, libcapture-tiny-perl, zfsutils-linux
+Recommends: gzip, openssh-client | ssh-clientmbuffer, pv, lzop
 Description: Policy-driven snapshot management and replication tools
+ A policy-driven snapshot management tool for ZFS filesystems.
+ This package includes both sanoid (the snapshot management tool) and
+ syncoid (the replication tool) along with syncoid-runner for
+ automated replication scheduling.
