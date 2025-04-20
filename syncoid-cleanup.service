@@ -1,0 +1,14 @@
+[Unit]
+Description=Syncoid Snapshot Cleanup Service
+Documentation=https://github.com/tgunr/sanoid
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/syncoid-runner --cleanup
+User=root
+IOSchedulingClass=idle
+Nice=19
+
+[Install]
+WantedBy=multi-user.target
